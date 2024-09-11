@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #messages { list-style-type: none; margin: 0; padding: 0; }
+        #messages li { padding: 5px 10px; }
+        #messages li:nth-child(odd) { background: #eee; }
+        #chat-form, #login-form, #register-form { display: flex; padding: 10px; }
+        #chat-form input, #login-form input, #register-form input { flex-grow: 1; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div id="auth-container">
+        <h2>Login</h2>
+        <form id="login-form">
+            <input type="text" id="login-username" placeholder="Username" required>
+            <input type="password" id="login-password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+        <p>Don't have an account? <a href="#" id="show-register">Register</a></p>
+
+        <h2 style="display: none;">Register</h2>
+        <form id="register-form" style="display: none;">
+            <input type="text" id="register-username" placeholder="Username" required>
+            <input type="password" id="register-password" placeholder="Password" required>
+            <button type="submit">Register</button>
+        </form>
+    </div>
+
+    <div id="chat-container" style="display: none;">
+        <h2>Chat</h2>
+        <ul id="messages"></ul>
+        <form id="chat-form">
+            <input id="chat-input" type="text" autocomplete="off" placeholder="Type a message..." />
+            <button>Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let socket;
+        const authContainer = document.getElementById('auth-container');
+        const chatContainer = document.getElementById('chat-container');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const showRegisterLink = document.getElementById('show-register');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const messages = document.getElementById('messages');
+
+        showRegisterLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'flex';
+            document.querySelector('#auth-container h2').style.display = 'none';
+            document.querySelector('#auth-container h2:last-of-type').style.display = 'block';
+        });
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Registration failed');
+                }
+
+                const data = await response.json();
+                alert('Registration successful! Please login.');
+                loginForm.style.display = 'flex';
+                registerForm.style.display = 'none';
+            } catch (error) {
+                alert('Registration failed. Please try again.');
+            }
+        });
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Login failed');
+                }
+
+                const data = await response.json();
+                localStorage.setItem('token', data.token);
+
+                authContainer.style.display = 'none';
+                chatContainer.style.display = 'block';
+
+                socket = io({
+                    auth: {
+                        token: data.token
+                    }
+                });
+
+                setupChatListeners();
+            } catch (error) {
+                alert('Login failed. Please try again.');
+            }
+        });
+
+		socket.on('connect', () => {
+			console.log('Connected to server');
+		});
+		
+		socket.on('connect_error', (error) => {
+			console.error('Connection error:', error);
+		});
+
+        function setupChatListeners() {
+            chatForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (chatInput.value) {
+                    socket.emit('chat message', chatInput.value);
+                    chatInput.value = '';
+                }
+            });
+
+            socket.on('chat message', (msg) => {
+                const li = document.createElement('li');
+                li.textContent = `${msg.username}: ${msg.message}`;
+                messages.appendChild(li);
+                window.scrollTo(0, document.body.scrollHeight);
+            });
+        }
+    </script>
+</body>
+</html>
